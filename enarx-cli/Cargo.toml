@@ -1,0 +1,15 @@
+[package]
+name = "enarx-cli"
+version = "0.1.0"
+authors = ["Will Woods <will@wizard.zone>"]
+edition = "2018"
+license = "Apache-2.0"
+
+[dependencies]
+log = "0.4"
+env_logger = "0.9"
+structopt = "0.3"
+anyhow = "1.0"
+enarx-config = { path = "../enarx-config", version = "0.1.0" }
+serial_test = "0.5"
+quiche = "0.9"

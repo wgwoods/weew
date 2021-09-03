@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "enarx-cli",
+    "enarx-config",
+]
