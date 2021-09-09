@@ -1,0 +1,129 @@
+// SPDX-License-Identifier: Apache-2.0
+syntax = "proto3";
+
+package enarx.v0;
+
+import "google/protobuf/any.proto";
+
+option optimize_for = LITE_RUNTIME;
+
+// Keepldr service - `keepldr` acting as a server
+service Keepldr {
+    rpc Info(InfoRequest) returns (KeepldrInfo);
+    rpc Boot(BootRequest) returns (Result);
+}
+
+// Info() request
+message InfoRequest { }
+
+// Information about the host's supported TEE backend
+message BackendInfo {
+    // Details about the host's KVM support
+    message KVMInfo { }
+    optional KVMInfo kvm = 1;
+
+    // Details about the host's SGX support
+    message SGXInfo {
+        // Number of bits in the maximum enclave size.
+        // (e.g. 28 means max enclave size is 1<<28 == 0x1000_0000 == 256MB)
+        uint32 max_enclave_size_bits = 1;
+    }
+    optional SGXInfo sgx = 2;
+
+    // Details about the host's SEV support
+    message SEVInfo { }
+    optional SEVInfo sev = 3;
+}
+
+// Keepldr Info() reply
+message KeepldrInfo { 
+    // What does this keepldr call itself?
+    string name = 1;
+
+    // The keepldr's version, as a semver string.
+    string version = 2;
+
+    // The version of the sallyport interface used by this keepldr.
+    string sallyport_version = 3;
+
+    // Information about this host's supported hardware backends
+    BackendInfo backend = 4;
+}
+
+// Boot() request.
+// This tells the host to start a new keep that contains these items.
+message BootRequest {
+    // A message that includes / refers / points to a boot item
+    message BootItem {
+        oneof from {
+            // The item itself, as a binary blob
+            bytes blob = 1;
+            // TODO: other methods to come...
+        }
+    }
+
+    // The shim provides a standard interface to one hardware backend.
+    // Each shim is backend-specific, so the client needs to send a shim that
+    // works with one of the host's supported backends.
+    // You can think of this like the keep's kernel.
+    BootItem shim = 1;
+
+    // The "exec" item is what will be initially executed inside the keep.
+    // It's responsible for doing any further keep setup, then loading and
+    // executing the actual workload. Think of this like the keep's `init`.
+    BootItem exec = 2;
+
+    // The "work" item is the actual workload that "exec" will run.
+    // It *can* be sent in this message, but note that we're still in the
+    // plaintext, host-visible part of this process, so if your workload
+    // is security-sensitive you should probably wait and send this to the
+    // secure service (TBD) instead.
+    optional BootItem work = 3;
+}
+
+// Some generic return codes, patterned after google.rpc.Code:
+// https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto
+enum Code {
+    // HTTP mapping:  200 OK
+    // errno mapping: 0 OK
+    OK = 0;
+
+    // HTTP mapping:  499 Client Closed Request
+    // errno mapping: EINTR 4 Interrupted System Call
+    CANCELLED = 1;
+
+    // HTTP mapping:  500 Internal Server Error
+    // errno mapping: EIO 5 Input/output error
+    UNKNOWN = 2;
+
+    // HTTP mapping:  400 Bad Request
+    // errno mapping: ENOEXEC 8 Exec format error
+    INVALID = 3;
+
+    // HTTP mapping: [TODO]
+    // errno mapping: ETIME 62 Timer expired
+    TIMEOUT = 4;
+    
+    // HTTP mapping: [TODO]
+    // errno mapping: ENOENT 2 No such file or directory
+    NOT_FOUND = 5;
+
+    // HTTP mapping: [TODO]
+    // errno mapping: EEXIST 17 File exists
+    ALREADY_EXISTS = 6;
+    
+    // HTTP mapping: [TODO]
+    // errno mapping: EACCES 13 Permission denied
+    PERMISSION_DENIED = 7;
+    
+    // HTTP mapping: [TODO]
+    // errno mapping: ENOMEM 12 Cannot allocate memory
+    RESOURCE_EXHAUSTED = 8;
+}
+
+// A generic Result message
+message Result {
+    Code code = 1;
+    string message = 2;
+    repeated google.protobuf.Any details = 3;
+}
