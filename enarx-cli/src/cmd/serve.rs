@@ -3,130 +3,107 @@
 use crate::cmd::SubCommand;
 use crate::util::ListenFds;
 
-use std::{convert::TryInto, path::PathBuf};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use structopt::StructOpt;
-use std::str::FromStr;
 use anyhow::{bail, Context, Result};
-use log::info;
-use quiche;
+use log::{debug, info};
 
+use tonic::{transport::Server, Request, Response, Status};
+
+mod v0 {
+    tonic::include_proto!("enarx.v0");
+}
+
+use v0::keepldr_server::{Keepldr, KeepldrServer};
+use v0::{InfoRequest, KeepldrInfo, BackendInfo};
 
 #[cfg(unix)]
-use std::os::unix::{io::AsRawFd, io::FromRawFd, net::UnixDatagram};
+use std::os::unix::{io::AsRawFd, io::FromRawFd, net::UnixStream};
 
-#[derive(StructOpt, Debug)]
-pub struct TLSOptions {
-    /// PEM-encoded certificate chain
-    #[structopt(long)]
-    pub cert: Option<PathBuf>,
-    
-    /// PEM-encoded private key
-    #[structopt(long)]
-    pub key: Option<PathBuf>,
+type TonicResult<T> = std::result::Result<Response<T>, Status>;
 
-    /// File containing trusted CA certificates
-    #[structopt(long)]
-    pub cacert: Option<PathBuf>,
+#[tonic::async_trait]
+impl<T> Keepldr for KeepldrServer<T>
+where T: Keepldr
+{
+    async fn info(&self, req: Request<InfoRequest>) -> TonicResult<KeepldrInfo> {
+        let keepldrinfo = KeepldrInfo {
+            name: "enarx serve".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            sallyport_version: "0.1.0".to_string(), // FIXME
+            backend: Some(BackendInfo { sgx: None, kvm: None, sev: None }),    
+        };
+        Ok(Response::new(keepldrinfo))
+    }
 
-    /// Directory containing trusted CA certificates
-    #[structopt(long)]
-    pub capath: Option<PathBuf>,
+    async fn boot(&self, request: Request<v0::BootRequest>) -> TonicResult<v0::Result> {
+        let boot = request.get_ref();
+        let result = v0::Result {
+            code: v0::Code::Unknown as i32,
+            message: format!("got shim ({} bytes) and exec ({} bytes)", boot.shim, boot.exec),
+            details: vec![],
+        };
+        Ok(Response::new(result))
+    }
 }
 
+/// Handle an incoming request as a systemd socket-activated service
 #[derive(StructOpt, Debug)]
 pub struct ServeOptions {
+    /// Handle a connection from a systemd socket unit with "Accept=yes"
+    #[structopt(long)]
+    pub systemd_socket_accept: bool,
+
     /// Idle connection timeout time, in milliseconds (0=forever)
+    #[structopt(long, default_value = "5000")]
     pub idle_timeout: u64,
 
-    /// Options for setting up TLS certificate chains & keys
-    #[structopt(flatten)]
-    pub tls: TLSOptions,
+    /// Socket path to listen on
+    #[structopt(required_unless = "systemd-socket-accept")]
+    pub socket_path: Option<PathBuf>,
 }
-
-struct ConnectionIdGenerator {
-    //rng: Box<dyn ring::rand::SecureRandom>,
-    //seed: ring::hmac::Key,
-}
-
-impl ConnectionIdGenerator {
-    fn new() -> Result<Self> {
-        Ok(Self {})
-    }
-}
-
-#[inline]
-fn quiche_path<'a>(p: &'a PathBuf) -> Result<&'a str> {
-    match p.to_str() {
-        None => bail!("PathBuf {:?} can't be converted to a &str", p),
-        Some(s) => Ok(s),
-    }
-}
-
-const MAX_DATAGRAM_SIZE: usize = 1350;
 
 impl ServeOptions {
-    fn quiche_config(self) -> Result<quiche::Config> {
-        let mut config = quiche::Config::new(quiche::PROTOCOL_VERSION)?;
-
-        if let Some(cert) = self.tls.cert {
-            config.load_cert_chain_from_pem_file(quiche_path(&cert)?)?;
-        }
-
-        if let Some(key) = self.tls.key {
-            config.load_priv_key_from_pem_file(quiche_path(&key)?)?;
-        }
-
-        if let Some(cacert) = self.tls.cacert {
-            config.load_verify_locations_from_file(quiche_path(&cacert)?)?;
-        }
-
-        if let Some(capath) = self.tls.capath {
-            config.load_verify_locations_from_directory(quiche_path(&capath)?)?;
-        }
-
-        config.set_application_protos(quiche::h3::APPLICATION_PROTOCOL)?;
-        
-        config.set_max_idle_timeout(self.idle_timeout);
-
-        config.set_max_send_udp_payload_size(MAX_DATAGRAM_SIZE);
-
-        // FUTURE: we could expose these parameters as well...
-        config.set_initial_max_data(10_000_000);
-        config.set_initial_max_stream_data_bidi_local(1_000_000);
-        config.set_initial_max_stream_data_bidi_remote(1_000_000);
-        config.set_initial_max_stream_data_uni(1_000_000);
-        config.set_initial_max_streams_bidi(100);
-        config.set_initial_max_streams_uni(100);
-        config.set_disable_active_migration(true);
-        config.enable_early_data();
-    
-        Ok(config)
+    fn serve(&self, sock: UnixStream) -> Result<()> {
+        // TODO: apply idle_timeout
+        // TODO: actually... serve
+        info!("you did it!!");
+        Ok(())
     }
 
-    fn serve(self, sock: UnixDatagram) -> Result<()> {
-        let mut buf = [0; 1024*64];
-        let mut out = [0; MAX_DATAGRAM_SIZE];
-        let config = self.quiche_config();
-        let h3conf = quiche::h3::Config::new();
-        let cidgen = ConnectionIdGenerator::new();
-        Ok(())
+    fn accept_from_systemd(&self) -> Result<UnixStream> {
+        // Get systemd socket info
+        let listen_fds = ListenFds::take_from_env()?;
+        debug!("got fds: {:?}", listen_fds);
+        let sock = match listen_fds.get_connection_fd() {
+            None => bail!("can't find fd for incoming socket connection"),
+            Some(fd) => unsafe { UnixStream::from_raw_fd(fd) },
+        };
+        debug!("fd {} local_addr {:?}", sock.as_raw_fd(), sock.local_addr()?);
+        debug!("INSTANCE_ID: {:?}", std::env::var("INSTANCE_ID"));
+        // If provided, check CLI-provided path against actual socket path
+        if let Some(ref expect_path) = self.socket_path {
+            let addr = sock.local_addr()?;
+            let socket_path = addr.as_pathname();
+            if socket_path != Some(expect_path) {
+                bail!("socket path {:?} does not match expected path {:?}",
+                        socket_path, expect_path);
+            }
+        }
+        Ok(sock)
     }
 }
 
 impl SubCommand for ServeOptions {
     fn execute(self) -> Result<()> {
-        let listen_fds = ListenFds::from_env()?;
-        ListenFds::unset_env();
-        let sock = match listen_fds.get_connection_fd() {
-            None => bail!("can't find connection socket fd"),
-            // FIXME: should check the socket type...
-            // FIXME: UnixDatagram makes no sense - we'd start a new server for
-            // every packet! Should just use a regular stream socket for this,
-            // then bring up a datagram socket inside the keep and advertise
-            // that via ALPN when we get there..
-            Some(fd) => unsafe { UnixDatagram::from_raw_fd(fd) },
-        };
-        // TODO: check the rest of the FDs, if any...
-        self.serve(sock)
+        if self.systemd_socket_accept {
+            match self.accept_from_systemd() {
+                Err(e) => bail!("Failed to get socket from systemd: {}", e),
+                Ok(sock) => self.serve(sock),
+            }
+        } else {
+            bail!("TODO! Use --systemd-socket-accept instead.")
+        }
     }
 }

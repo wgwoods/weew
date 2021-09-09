@@ -10,6 +10,12 @@ log = "0.4"
 env_logger = "0.9"
 structopt = "0.3"
 anyhow = "1.0"
-enarx-config = { path = "../enarx-config", version = "0.1.0" }
+enarx-config = { path = "../enarx-config", version = "0.1" }
+enarx-proto = { path = "../enarx-proto", version = "0.1" }
 serial_test = "0.5"
-quiche = "0.9"
+tonic = "0.5"
+prost = "0.8"
+prost-types = "0.8"
+
+[build-dependencies]
+tonic-build = "0.5"

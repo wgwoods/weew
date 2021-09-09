@@ -99,6 +99,12 @@ impl ListenFds {
         Ok(Self { fds, fdnames })
     }
 
+    pub fn take_from_env() -> Result<Self> {
+        let r = Self::from_env();
+        Self::unset_env();
+        r
+    }
+
     pub fn unset_env() {
         std::env::remove_var("LISTEN_PID");
         std::env::remove_var("LISTEN_FDS");
@@ -127,6 +133,9 @@ impl ListenFds {
     /// the activating socket for services with `Accept=yes` in the socket
     /// unit file. See sd_listen_fds(3) for details.
     pub fn get_connection_fd(&self) -> Option<RawFd> {
+        if self.fds == 1 {
+            return Some(LISTEN_FDS_START)
+        }
         if self.fdnames.is_some() {
             for (fd, name) in self.iter_with_names() {
                 if name == "connection" {

@@ -11,7 +11,7 @@ use std::fs::File;
 //use std::net::Shutdown;
 
 #[cfg(unix)]
-use std::os::unix::{io::AsRawFd, net::UnixStream, net::UnixDatagram};
+use std::os::unix::{io::AsRawFd, net::UnixStream};
 use std::io::Read;
 use enarx_config::EnvConfig;
 
