@@ -1,14 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use structopt::StructOpt;
 use std::net::SocketAddr;
-use std::os::unix::io::RawFd;
-use std::os::unix::prelude::AsRawFd;
+use std::path::PathBuf;
+use std::os::unix::io::{RawFd, AsRawFd};
 use wasmparser::WasmFeatures;
 
-// TODO: TLS stuff, keymgr URI, etc.
-//pub struct KeepConfig { }
+/// Options for setting up TLS connections
+#[derive(StructOpt, Debug)]
+pub struct TLSOptions {
+    /// PEM-encoded certificate chain
+    #[structopt(long)]
+    pub cert: Option<PathBuf>,
+    
+    /// PEM-encoded private key
+    #[structopt(long)]
+    pub key: Option<PathBuf>,
 
-/// Settings for the runtime environment
+    /// File containing trusted CA certificates
+    #[structopt(long)]
+    pub cacert: Option<PathBuf>,
+
+    /// Directory containing trusted CA certificates
+    #[structopt(long)]
+    pub capath: Option<PathBuf>,
+}
+
+
+/// Settings for the workload's runtime environment
 #[derive(Debug)]
 pub struct EnvConfig {
     pub envs: Vec<(String, String)>,
@@ -50,6 +69,7 @@ impl EnvConfig {
 
 }
 
+/// Options for 
 #[derive(Debug)]
 pub enum ReadHandle {
     Null,

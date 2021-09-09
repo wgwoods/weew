@@ -7,3 +7,4 @@ edition = "2018"
 
 [dependencies]
 wasmparser = "0.80"
+structopt = "0.3"
