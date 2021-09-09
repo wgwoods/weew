@@ -1,0 +1,10 @@
+[Unit]
+Description=Enarx Socket
+PartOf=enarx.service
+
+[Socket]
+ListenStream=%t/enarx/enarx.sock
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

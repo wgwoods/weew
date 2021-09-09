@@ -1,0 +1,9 @@
+[Unit]
+Description=Enarx API service
+Requires=enarx.socket
+After=enarx.socket
+
+[Service]
+Type=simple
+Environment=RUST_LOG="enarx_cli=debug"
+ExecStart=/home/wgwoods/src/enarx/weew/target/debug/enarx-cli serve --systemd-socket-accept
