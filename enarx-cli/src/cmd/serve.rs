@@ -3,29 +3,28 @@
 use crate::cmd::SubCommand;
 use crate::util::ListenFds;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
+use std::pin::Pin;
 use structopt::StructOpt;
 use anyhow::{bail, Context, Result};
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use tonic::{transport::Server, Request, Response, Status};
 
-mod v0 {
-    tonic::include_proto!("enarx.v0");
-}
-
+use crate::proto::v0;
 use v0::keepldr_server::{Keepldr, KeepldrServer};
 use v0::{InfoRequest, KeepldrInfo, BackendInfo};
 
 #[cfg(unix)]
-use std::os::unix::{io::AsRawFd, io::FromRawFd, net::UnixStream};
+use std::os::unix::{io::AsRawFd, io::FromRawFd};
 
 type TonicResult<T> = std::result::Result<Response<T>, Status>;
 
+#[derive(Debug, Default)]
+struct KeepldrState {}
+
 #[tonic::async_trait]
-impl<T> Keepldr for KeepldrServer<T>
-where T: Keepldr
+impl Keepldr for KeepldrState
 {
     async fn info(&self, req: Request<InfoRequest>) -> TonicResult<KeepldrInfo> {
         let keepldrinfo = KeepldrInfo {
@@ -39,11 +38,13 @@ where T: Keepldr
 
     async fn boot(&self, request: Request<v0::BootRequest>) -> TonicResult<v0::Result> {
         let boot = request.get_ref();
+
         let result = v0::Result {
             code: v0::Code::Unknown as i32,
-            message: format!("got shim ({} bytes) and exec ({} bytes)", boot.shim, boot.exec),
+            message: format!("shim: {:?} exec: {:?}", boot.shim, boot.exec),
             details: vec![],
         };
+
         Ok(Response::new(result))
     }
 }
@@ -64,11 +65,96 @@ pub struct ServeOptions {
     pub socket_path: Option<PathBuf>,
 }
 
+use std::time::Duration;
+
+use tonic::transport::server::Connected;
+use std::os::unix::net::UnixStream;
+
+pub struct TonicUnixStream(pub tokio::net::UnixStream);
+
+impl FromRawFd for TonicUnixStream {
+    unsafe fn from_raw_fd(fd: std::os::unix::prelude::RawFd) -> Self {
+        let std = std::os::unix::net::UnixStream::from_raw_fd(fd);
+        Self(tokio::net::UnixStream::from_std(std).unwrap())
+    }
+}
+
+impl AsRawFd for TonicUnixStream {
+    fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
+        self.0.as_raw_fd()
+    }
+}
+
+use std::sync::Arc;
+impl Connected for TonicUnixStream {
+    type ConnectInfo = (
+        Option<Arc<tokio::net::unix::SocketAddr>>,
+        Option<tokio::net::unix::UCred>,
+    );
+    fn connect_info(&self) -> Self::ConnectInfo {
+        (self.0.peer_addr().ok().map(Arc::new), self.0.peer_cred().ok())
+    }
+}
+
+impl TonicUnixStream {
+    fn local_addr(&self) -> std::io::Result<tokio::net::unix::SocketAddr> {
+        self.0.local_addr()
+    }
+
+    fn from_std(std: std::os::unix::net::UnixStream) -> std::io::Result<Self> {
+        tokio::net::UnixStream::from_std(std).map(Self)
+    }
+}
+
+use tokio::io::{AsyncRead, AsyncWrite};
+
+impl AsyncRead for TonicUnixStream {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>
+    ) -> std::task::Poll<std::io::Result<()>> {
+        Pin::new(&mut self.0).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for TonicUnixStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8]
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.0).poll_shutdown(cx)
+    }
+}
+
 impl ServeOptions {
     fn serve(&self, sock: UnixStream) -> Result<()> {
-        // TODO: apply idle_timeout
-        // TODO: actually... serve
-        info!("you did it!!");
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+
+        rt.block_on( async {
+            Server::builder()
+                .timeout(Duration::from_millis(self.idle_timeout))
+                .add_service(KeepldrServer::new(KeepldrState::default()))
+                .serve_with_incoming(async_stream::stream! { yield TonicUnixStream::from_std(sock) })
+                .await
+        })?;
         Ok(())
     }
 
