@@ -2,6 +2,7 @@
 
 /// enarx-cli - the command-line frontend for running code in an Enarx Keep.
 pub mod cmd;
+pub mod proto;
 mod util;
 
 use anyhow::{bail, Result};
