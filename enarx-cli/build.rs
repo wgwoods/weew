@@ -5,12 +5,9 @@ fn main() -> Result<(), std::io::Error> {
     // doesn't emit "rerun-if-changed=PATH" directives for the .proto files
     // (see https://docs.rs/prost-build/0.8.0/src/prost_build/lib.rs.html#714)
     // so we have to do that ourselves.
-    let proto_files = vec![
-        "../enarx-proto/proto/v0.proto",
-    ];
-    let proto_include_path = vec![
-        "../enarx-proto/proto",
-    ];
+    /*
+    let proto_files = vec!["../enarx-proto/proto/v0.proto"];
+    let proto_include_path = vec!["../enarx-proto/proto"];
     for file in &proto_files {
         println!("cargo:rerun-if-changed={}", file)
     }
@@ -19,4 +16,6 @@ fn main() -> Result<(), std::io::Error> {
         .build_server(true)
         .out_dir("src/proto/")
         .compile(&proto_files, &proto_include_path)
+    */
+    Ok(())
 }

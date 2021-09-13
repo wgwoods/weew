@@ -13,7 +13,6 @@ type FdCount = usize;
 
 type Result<T> = std::result::Result<T, ListenFdError>;
 
-
 /// The error enum for ListenFd.
 #[derive(Debug, PartialEq)]
 pub enum ListenFdError {
@@ -32,7 +31,6 @@ impl std::fmt::Display for ListenFdError {
             ListenFdError::CountError => write!(f, "fd overflow/mismatch"),
         }
     }
-
 }
 
 impl From<VarError> for ListenFdError {
@@ -50,7 +48,6 @@ impl From<ParseIntError> for ListenFdError {
     }
 }
 
-
 // Convenience wrapper for getting environment variables where NotPresent
 // doesn't constitute an error
 fn optvar(key: &str) -> std::result::Result<Option<String>, VarError> {
@@ -67,7 +64,7 @@ pub struct ListenFds {
     pub fdnames: Option<Vec<String>>,
 }
 
-impl ListenFds {    
+impl ListenFds {
     fn get_listen_pid() -> Result<Pid> {
         Ok(var("LISTEN_PID")?.parse()?)
     }
@@ -134,19 +131,18 @@ impl ListenFds {
     /// unit file. See sd_listen_fds(3) for details.
     pub fn get_connection_fd(&self) -> Option<RawFd> {
         if self.fds == 1 {
-            return Some(LISTEN_FDS_START)
+            return Some(LISTEN_FDS_START);
         }
         if self.fdnames.is_some() {
             for (fd, name) in self.iter_with_names() {
                 if name == "connection" {
-                    return Some(fd)
+                    return Some(fd);
                 }
             }
         }
         None
     }
 }
-
 
 pub struct ListenFdNamesIter<'a> {
     cur: usize,
@@ -172,11 +168,9 @@ impl<'a> Iterator for ListenFdNamesIter<'a> {
         let remaining = self.lfd.fds - self.cur;
         (remaining, Some(remaining))
     }
-
 }
 
 impl<'a> ExactSizeIterator for ListenFdNamesIter<'a> {}
- 
 
 #[cfg(test)]
 mod tests {
@@ -309,9 +303,6 @@ mod tests {
         set_var("LISTEN_PID", std::process::id().to_string());
         set_var("LISTEN_FDS", "2");
         set_var("LISTEN_FDNAMES", "connection:other");
-        assert_eq!(
-            ListenFds::from_env().unwrap().get_connection_fd(),
-            Some(3)
-        );
+        assert_eq!(ListenFds::from_env().unwrap().get_connection_fd(), Some(3));
     }
 }

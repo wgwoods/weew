@@ -2,14 +2,13 @@
 
 /// enarx-cli - the command-line frontend for running code in an Enarx Keep.
 pub mod cmd;
-pub mod proto;
 mod util;
 
 use anyhow::{bail, Result};
 use log::{debug, info};
 use structopt::{clap::AppSettings, StructOpt};
 
-use cmd::{NoopOptions, RunOptions, ServeOptions, SubCommand};
+use cmd::{NoopOptions, RunOptions, ServeOptions, InfoOptions, SubCommand};
 
 /// Logging options
 #[derive(StructOpt, Debug)]
@@ -55,6 +54,7 @@ enum EnarxCommand {
     Run(RunOptions),
     Noop(NoopOptions),
     Serve(ServeOptions),
+    Info(InfoOptions),
 }
 
 // FUTURE: handle external subcommands
@@ -64,6 +64,7 @@ impl EnarxCommand {
             Self::Run(c) => c.execute(),
             Self::Noop(c) => c.execute(),
             Self::Serve(c) => c.execute(),
+            Self::Info(c) => c.execute(),
         }
     }
 }

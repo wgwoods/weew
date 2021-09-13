@@ -2,4 +2,4 @@
 
 mod listenfds;
 
-pub use listenfds::{ListenFds, ListenFdError};
+pub use listenfds::{ListenFdError, ListenFds};

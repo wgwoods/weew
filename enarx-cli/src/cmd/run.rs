@@ -10,10 +10,10 @@ use std::{fmt::Debug, path::PathBuf};
 use std::fs::File;
 //use std::net::Shutdown;
 
+use enarx_config::EnvConfig;
+use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::{io::AsRawFd, net::UnixStream};
-use std::io::Read;
-use enarx_config::EnvConfig;
 
 /// Run a WebAssembly module inside an Enarx Keep.
 #[derive(StructOpt, Debug)]
@@ -37,7 +37,7 @@ pub struct RunOptions {
     /// Path of the WebAssembly module to run
     #[structopt(index = 1, value_name = "MODULE", parse(from_os_str))]
     pub module: PathBuf,
-    
+
     /// Arguments to pass to the WebAssembly module
     #[structopt(value_name = "ARGS", last = true)]
     pub args: Vec<String>,
@@ -50,7 +50,6 @@ fn parse_env_var(s: &str) -> Result<(String, String)> {
     }
     Ok((parts[0].to_owned(), parts[1].to_owned()))
 }
-
 
 impl RunOptions {
     // The general idea here is something like this:
@@ -65,7 +64,7 @@ impl RunOptions {
         // TODO: self.module_on_fd
         File::open(&self.module).with_context(|| format!("could not open {:?}", self.module))
     }
-    
+
     #[cfg(unix)]
     fn local_keepmgr(&self) -> Result<()> {
         let (sock_l, sock_r) = UnixStream::pair()?;
@@ -77,7 +76,6 @@ impl RunOptions {
         bail!("Not implemented yet!");
     }
 }
-
 
 #[derive(Debug)]
 struct KeepBuilder {
@@ -101,7 +99,7 @@ impl KeepBuilder {
         // TODO/FUTURE
         self
     }
-    
+
     fn build(self) -> Result<KeepConn> {
         Ok(KeepConn {})
     }
@@ -156,7 +154,6 @@ impl KeepConn {
         Ok(Report {})
     }
 }
-
 
 impl SubCommand for RunOptions {
     /// Run a WebAssembly workload.

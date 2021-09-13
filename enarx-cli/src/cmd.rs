@@ -3,6 +3,7 @@
 mod noop;
 mod run;
 mod serve;
+mod info;
 
 use anyhow::Result;
 
@@ -11,4 +12,9 @@ pub trait SubCommand {
     fn execute(self) -> Result<()>;
 }
 
-pub use {noop::NoopOptions, run::RunOptions, serve::ServeOptions};
+pub use {
+    noop::NoopOptions,
+    run::RunOptions,
+    serve::ServeOptions,
+    info::InfoOptions,
+};
