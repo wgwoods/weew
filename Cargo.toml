@@ -1,7 +1,5 @@
 [workspace]
 
 members = [
-    "enarx-cli",
-    "enarx-proto",
-    "enarx-config",
+    "host",
 ]
