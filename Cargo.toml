@@ -1,5 +1,7 @@
 [workspace]
 
 members = [
-    "host",
+    #"host",
+    "client",
+    "proto",
 ]
